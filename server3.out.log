@@ -1,0 +1,6 @@
+Auto-provider inference failed: HfHubHTTPError('401 Client Error: Unauthorized for url: https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector (Request ID: Root=1-6a8eecb4-513c532537dfb0015333b8e0;a413d66d-050b-446f-9e2e-9fc9b529490c)\n\nInvalid username or password.')
+HF Inference fallback failed: HfHubHTTPError('401 Client Error: Unauthorized for url: https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector (Request ID: Root=1-6a8eecb5-45fc8e2249e2b49a08b1d5f1;317dda8f-72f9-47d0-8819-4858ca252400)\n\nInvalid username or password.')
+INFO:     127.0.0.1:59926 - "POST /api/detect HTTP/1.1" 502 Bad Gateway
+Auto-provider inference failed: HfHubHTTPError('401 Client Error: Unauthorized for url: https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector (Request ID: Root=1-6a8eedcc-6b64c91410e9669c3e09c9a7;4f2a7328-7fa2-4462-aace-8a3fbfaec7cd)\n\nInvalid username or password.')
+HF Inference fallback failed: HfHubHTTPError('401 Client Error: Unauthorized for url: https://router.huggingface.co/hf-inference/models/umm-maybe/AI-image-detector (Request ID: Root=1-6a8eedcd-57a478587e95dc2a1b2c7c7c;586b90d9-0d73-48f7-938e-ebb0baac4a48)\n\nInvalid username or password.')
+INFO:     127.0.0.1:54501 - "POST /api/detect HTTP/1.1" 502 Bad Gateway

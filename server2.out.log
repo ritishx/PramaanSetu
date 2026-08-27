@@ -1,0 +1,4 @@
+INFO:     127.0.0.1:59119 - "GET /api/health HTTP/1.1" 200 OK
+Auto-provider inference failed: ValueError('Expected binary inputs or a local path or a URL. Got <_io.BytesIO object at 0x000001195CF03650>')
+HF Inference fallback failed: ValueError('Expected binary inputs or a local path or a URL. Got <_io.BytesIO object at 0x000001195E388F90>')
+INFO:     127.0.0.1:59125 - "POST /api/detect HTTP/1.1" 502 Bad Gateway
