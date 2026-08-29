@@ -1,7 +1,8 @@
-fastapi
-python-multipart
-python-dotenv
-Pillow
-transformers
+fastapi==0.141.1
+uvicorn==0.52.0
+python-multipart==0.0.20
+python-dotenv==1.2.1
+Pillow==12.0.0
+transformers==4.57.3
 torch==2.8.0+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
