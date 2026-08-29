@@ -17,5 +17,3 @@ In a second terminal:
 npm install
 npm run dev
 ```
-
-Open the localhost address Vite displays. The browser sends each selected image to the local Python API, which calls `InferenceClient(provider="auto", api_key=os.environ["HF_TOKEN"])` with `umm-maybe/AI-image-detector`. The token remains server-side. The model reports AI-generation risk, not proof that a document is genuine.
