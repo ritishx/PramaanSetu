@@ -1,12 +1,15 @@
 import io
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import torch
 from PIL import Image
 from dotenv import load_dotenv
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+
 from transformers import (
     AutoImageProcessor,
     AutoModelForImageClassification,
@@ -21,20 +24,8 @@ load_dotenv()
 
 
 # ============================================================
-# PROJECT PATHS
+# PATHS
 # ============================================================
-
-# Current file:
-#
-#   PramaanSetu/
-#       api/
-#           index.py
-#
-# Model:
-#
-#   PramaanSetu/
-#       models/
-#           ai-detector/
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -45,16 +36,14 @@ MODEL_DIR = BASE_DIR / "models" / "ai-detector"
 # CONFIGURATION
 # ============================================================
 
-# Keep this below Vercel's request payload limit.
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024
 
-# Vercel Functions run without a CUDA GPU.
-# Always use CPU.
+# Render backend uses CPU.
 DEVICE = torch.device("cpu")
 
 
 # ============================================================
-# GLOBAL MODEL OBJECTS
+# GLOBAL MODEL
 # ============================================================
 
 processor = None
@@ -65,12 +54,7 @@ model = None
 # LOAD MODEL
 # ============================================================
 
-def load_local_model():
-    """
-    Load the AI detector from the model files stored locally
-    inside /models/ai-detector.
-    """
-
+def load_model():
     global processor
     global model
 
@@ -82,102 +66,26 @@ def load_local_model():
     print(f"Model directory: {MODEL_DIR}")
     print(f"Device: {DEVICE}")
 
-    # --------------------------------------------------------
-    # Check model directory
-    # --------------------------------------------------------
-
     if not MODEL_DIR.exists():
-
         raise RuntimeError(
-            "AI model directory was not found.\n"
-            f"Expected location: {MODEL_DIR}"
+            f"Model directory not found: {MODEL_DIR}"
         )
 
-    if not MODEL_DIR.is_dir():
+    print("Loading image processor...")
 
-        raise RuntimeError(
-            f"AI model path is not a directory: {MODEL_DIR}"
-        )
+    processor = AutoImageProcessor.from_pretrained(
+        str(MODEL_DIR),
+        local_files_only=True,
+    )
 
-    # --------------------------------------------------------
-    # Check for model files
-    # --------------------------------------------------------
+    print("Loading AI model...")
 
-    model_files = list(MODEL_DIR.iterdir())
-
-    print("Model directory contents:")
-
-    for item in model_files:
-        print(f"  - {item.name}")
-
-    # --------------------------------------------------------
-    # Load image processor
-    # --------------------------------------------------------
-
-    try:
-
-        print("Loading image processor...")
-
-        processor = AutoImageProcessor.from_pretrained(
-            str(MODEL_DIR),
-            local_files_only=True,
-        )
-
-        print("Image processor loaded.")
-
-    except Exception as error:
-
-        print(
-            "Failed to load image processor:"
-        )
-
-        print(repr(error))
-
-        processor = None
-
-        raise RuntimeError(
-            "Failed to load the AI image processor."
-        ) from error
-
-    # --------------------------------------------------------
-    # Load model
-    # --------------------------------------------------------
-
-    try:
-
-        print("Loading AI model...")
-
-        model = AutoModelForImageClassification.from_pretrained(
-            str(MODEL_DIR),
-            local_files_only=True,
-        )
-
-        print("AI model loaded.")
-
-    except Exception as error:
-
-        print(
-            "Failed to load AI model:"
-        )
-
-        print(repr(error))
-
-        model = None
-
-        raise RuntimeError(
-            "Failed to load the local AI detector."
-        ) from error
-
-    # --------------------------------------------------------
-    # Move model to CPU
-    # --------------------------------------------------------
+    model = AutoModelForImageClassification.from_pretrained(
+        str(MODEL_DIR),
+        local_files_only=True,
+    )
 
     model.to(DEVICE)
-
-    # --------------------------------------------------------
-    # Evaluation mode
-    # --------------------------------------------------------
-
     model.eval()
 
     print("=" * 70)
@@ -186,30 +94,24 @@ def load_local_model():
 
 
 # ============================================================
-# FASTAPI LIFESPAN
+# APPLICATION LIFESPAN
 # ============================================================
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
 
-    load_local_model()
+    load_model()
 
     yield
 
 
 # ============================================================
-# FASTAPI APP
+# FASTAPI
 # ============================================================
 
 app = FastAPI(
-    title="PramaanSetu AI Screening",
-    description=(
-        "AI-generated image screening API "
-        "for the PramaanSetu prototype."
-    ),
+    title="PramaanSetu AI Screening API",
     version="1.0.0",
-    docs_url=None,
-    redoc_url=None,
     lifespan=lifespan,
 )
 
@@ -220,19 +122,37 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
+
+    # Vercel frontend can call this API.
     allow_origins=["*"],
+
     allow_credentials=False,
+
     allow_methods=[
         "GET",
         "POST",
         "OPTIONS",
     ],
+
     allow_headers=["*"],
 )
 
 
 # ============================================================
-# HEALTH CHECK
+# ROOT
+# ============================================================
+
+@app.get("/")
+def root():
+
+    return {
+        "service": "PramaanSetu AI Screening API",
+        "status": "online",
+    }
+
+
+# ============================================================
+# HEALTH
 # ============================================================
 
 @app.get("/api/health")
@@ -242,35 +162,28 @@ def health():
         "ready": model is not None,
         "model": "Smogy/SMOGY-Ai-images-detector",
         "mode": "local",
-        "device": str(DEVICE),
+        "device": "cpu",
     }
 
 
 # ============================================================
-# AI DETECTION ENDPOINT
+# DETECTION
 # ============================================================
 
 @app.post("/api/detect")
-async def detect_ai_generated_image(
+async def detect(
     file: UploadFile = File(...),
 ):
-
-    # --------------------------------------------------------
-    # Check model
-    # --------------------------------------------------------
 
     if model is None or processor is None:
 
         raise HTTPException(
             status_code=503,
-            detail=(
-                "The local AI detector "
-                "is not loaded yet."
-            ),
+            detail="AI detector is not loaded.",
         )
 
     # --------------------------------------------------------
-    # Validate content type
+    # Validate file
     # --------------------------------------------------------
 
     if (
@@ -280,14 +193,11 @@ async def detect_ai_generated_image(
 
         raise HTTPException(
             status_code=415,
-            detail=(
-                "Please upload a JPG, PNG, "
-                "or other image file."
-            ),
+            detail="Please upload an image file.",
         )
 
     # --------------------------------------------------------
-    # Read image
+    # Read file
     # --------------------------------------------------------
 
     try:
@@ -296,106 +206,72 @@ async def detect_ai_generated_image(
 
     except Exception as error:
 
-        print(
-            f"Failed to read uploaded file: {error!r}"
-        )
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Could not read the uploaded file."
-            ),
+            detail="Could not read uploaded image.",
         ) from error
-
-    # --------------------------------------------------------
-    # Empty file
-    # --------------------------------------------------------
 
     if not image_bytes:
 
         raise HTTPException(
             status_code=400,
-            detail="The selected image is empty.",
+            detail="The uploaded image is empty.",
         )
 
     # --------------------------------------------------------
-    # File size
+    # Size check
     # --------------------------------------------------------
 
     if len(image_bytes) > MAX_UPLOAD_BYTES:
 
         raise HTTPException(
             status_code=413,
-            detail=(
-                "Images must be 4 MB or smaller."
-            ),
+            detail="Image must be 4 MB or smaller.",
         )
 
     # --------------------------------------------------------
-    # Decode image
+    # Open image
     # --------------------------------------------------------
 
     try:
 
         image = Image.open(
             io.BytesIO(image_bytes)
-        )
-
-        image = image.convert("RGB")
+        ).convert("RGB")
 
     except Exception as error:
 
-        print(
-            f"Image decoding failed: {error!r}"
-        )
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                "The uploaded file is not "
-                "a valid image."
-            ),
+            detail="Invalid image file.",
         ) from error
 
     # --------------------------------------------------------
-    # Run inference
+    # AI inference
     # --------------------------------------------------------
 
     try:
 
-        print(
-            f"Running AI detection for: "
-            f"{file.filename}"
-        )
-
-        # Convert image into model inputs.
         inputs = processor(
             images=image,
             return_tensors="pt",
         )
 
-        # Move tensors to CPU.
         inputs = {
             key: value.to(DEVICE)
             for key, value in inputs.items()
         }
 
-        # Run model without gradients.
         with torch.inference_mode():
 
             outputs = model(**inputs)
 
-        # Convert logits to probabilities.
         probabilities = torch.softmax(
             outputs.logits,
             dim=-1,
         )[0]
 
         predictions = []
-
-        # ----------------------------------------------------
-        # Convert model predictions to JSON
-        # ----------------------------------------------------
 
         for index, score in enumerate(
             probabilities
@@ -413,35 +289,25 @@ async def detect_ai_generated_image(
                 }
             )
 
-        # Highest confidence first.
         predictions.sort(
             key=lambda item: item["score"],
             reverse=True,
         )
 
-        print(
-            "Model predictions:",
-            predictions,
-        )
-
     except Exception as error:
 
         print(
-            "Model inference failed:"
+            "Inference error:",
+            repr(error),
         )
-
-        print(repr(error))
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "The local AI detector failed "
-                "while reviewing this image."
-            ),
+            detail="AI detection failed.",
         ) from error
 
     # ========================================================
-    # INTERPRET MODEL LABELS
+    # INTERPRET RESULT
     # ========================================================
 
     synthetic = None
@@ -449,43 +315,27 @@ async def detect_ai_generated_image(
 
     for prediction in predictions:
 
-        label_lower = (
-            prediction["label"].lower()
-        )
+        label = prediction["label"].lower()
 
-        # ----------------------------------------------------
-        # AI / synthetic labels
-        # ----------------------------------------------------
-
-        if (
-            synthetic is None
-            and any(
-                word in label_lower
-                for word in (
-                    "ai",
-                    "fake",
-                    "generated",
-                    "synthetic",
-                )
-            )
+        if synthetic is None and any(
+            word in label
+            for word in [
+                "ai",
+                "fake",
+                "generated",
+                "synthetic",
+            ]
         ):
 
             synthetic = prediction
 
-        # ----------------------------------------------------
-        # Real / authentic labels
-        # ----------------------------------------------------
-
-        if (
-            real is None
-            and any(
-                word in label_lower
-                for word in (
-                    "real",
-                    "human",
-                    "authentic",
-                )
-            )
+        if real is None and any(
+            word in label
+            for word in [
+                "real",
+                "human",
+                "authentic",
+            ]
         ):
 
             real = prediction
@@ -507,17 +357,10 @@ async def detect_ai_generated_image(
         raise HTTPException(
             status_code=502,
             detail={
-                "message": (
-                    "The model returned labels "
-                    "this API does not recognise."
-                ),
+                "message": "Unknown model labels.",
                 "predictions": predictions,
             },
         )
-
-    # --------------------------------------------------------
-    # Clamp risk between 0 and 1
-    # --------------------------------------------------------
 
     risk = max(
         0.0,
@@ -527,21 +370,13 @@ async def detect_ai_generated_image(
         ),
     )
 
-    # ========================================================
-    # USER-FACING RESULT
-    # ========================================================
-
     if risk >= 0.50:
 
-        label = (
-            "Likely AI-generated or manipulated"
-        )
+        label = "Likely AI-generated or manipulated"
 
     else:
 
-        label = (
-            "No strong AI-generation signal"
-        )
+        label = "No strong AI-generation signal"
 
     # ========================================================
     # RESPONSE
@@ -555,16 +390,13 @@ async def detect_ai_generated_image(
             2,
         ),
         "label": label,
-        "model": (
-            "Smogy/SMOGY-Ai-images-detector"
-        ),
+        "model": "Smogy/SMOGY-Ai-images-detector",
         "mode": "local",
-        "device": str(DEVICE),
+        "device": "cpu",
         "predictions": predictions,
         "disclaimer": (
-            "This is a screening signal, "
-            "not proof that a document or "
-            "image is authentic."
+            "This is a screening signal, not proof "
+            "that a document or image is authentic."
         ),
     }
 

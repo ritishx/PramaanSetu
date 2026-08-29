@@ -681,7 +681,15 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const response = await fetch('/api/detect', { method: 'POST', body: formData })
+
+      // Production: set VITE_API_URL in Vercel to your Render backend URL.
+      // Local development: leave it empty and use the Vite proxy/local API.
+      const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+      const response = await fetch(`${API_URL}/api/detect`, {
+        method: 'POST',
+        body: formData
+      })
       const isJson = response.headers.get('content-type')?.includes('application/json')
       const payload = isJson ? await response.json() : null
 
