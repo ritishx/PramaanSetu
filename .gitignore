@@ -12,6 +12,8 @@ __pycache__/
 
 models/**/.cache/
 
+server*.log
+
 .vscode/
 .idea/
 
